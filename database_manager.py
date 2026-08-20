@@ -52,7 +52,59 @@ class DatabaseConnectionPool:
             print("[System] Database schema verified.")
         except sqlite3.Error as e:
             print(f"Database error: {e}")
+    def _create_tables(self):
+        """Creates the database schema if it doesn't already exist."""
+        try:
+            self.cursor.executescript("""
+                CREATE TABLE IF NOT EXISTS Patients (
+                    PatientID TEXT PRIMARY KEY,
+                    Name TEXT NOT NULL,
+                    DOB TEXT,
+                    BloodType TEXT
+                );
+                CREATE TABLE IF NOT EXISTS Doctors (
+                    DoctorID TEXT PRIMARY KEY,
+                    Name TEXT NOT NULL,
+                    LicenseNumber TEXT UNIQUE NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS Encounters (
+                    EncounterID TEXT PRIMARY KEY,
+                    PatientID TEXT,
+                    TriageLevel TEXT,
+                    SymptomsText TEXT
+                );
+                CREATE TABLE IF NOT EXISTS Users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE,
+                    password_hash TEXT,
+                    role TEXT
+                );
+                CREATE TABLE IF NOT EXISTS Chats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sender_id INTEGER,
+                    receiver_id INTEGER,
+                    message TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS Prescriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    patient_id INTEGER,
+                    doctor_id INTEGER,
+                    medication TEXT,
+                    instructions TEXT
+                );
+                CREATE TABLE IF NOT EXISTS PharmacyOrders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    prescription_id INTEGER,
+                    status TEXT
+                );
+            """)
+            self.connection.commit()
+            print("[System] Database schema verified.")
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")  
 
+            
     def execute_query(self, query, parameters=()):
         """Method your teammates will call to insert or fetch data."""
         try:
@@ -62,11 +114,3 @@ class DatabaseConnectionPool:
         except sqlite3.Error as e:
             print(f"Query error: {e}")
             return None
-
-# --- Example Usage (How your teammates will use your code) ---
-if __name__ == "__main__":
-    # Even if they try to create multiple instances, they all share the exact same memory address
-    db1 = DatabaseConnectionPool()
-    db2 = DatabaseConnectionPool()
-    
-    print(f"Are db1 and db2 the exact same object? {db1 is db2}")
