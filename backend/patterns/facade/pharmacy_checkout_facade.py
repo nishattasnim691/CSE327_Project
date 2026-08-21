@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from backend.patterns.facade.inventory_service import InventoryService
-from backend.patterns.facade.order_service import OrderService
-from backend.patterns.facade.payment_service import PaymentService
-from backend.schemas.member3_schemas import CheckoutRequestModel
+from patterns.facade.inventory_service import InventoryService
+from patterns.facade.order_service import OrderService
+from patterns.facade.payment_service import PaymentService
+from schemas.member3_schemas import CheckoutRequestModel
 
 
 class PharmacyCheckoutFacade:

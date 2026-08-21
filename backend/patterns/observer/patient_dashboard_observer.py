@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from backend.patterns.observer.health_record import (
+from patterns.observer.health_record import (
     VitalObserver,
     VitalRecord,
 )
-from backend.realtime.websocket_manager import WebSocketManager
+from realtime.websocket_manager import WebSocketManager
 
 
 class PatientDashboardObserver(VitalObserver):

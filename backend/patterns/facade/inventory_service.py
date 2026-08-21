@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.schemas.member3_schemas import PharmacyItemModel
+from schemas.member3_schemas import PharmacyItemModel
 
 
 class InventoryService:

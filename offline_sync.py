@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from database_manager import DatabaseConnectionPool
+from backend.database.database_manager import DatabaseConnectionPool
 
 class Command(ABC):
     """

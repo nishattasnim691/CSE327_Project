@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from backend.schemas.member3_schemas import CheckoutRequestModel
+from schemas.member3_schemas import CheckoutRequestModel
 
 
 class OrderService:

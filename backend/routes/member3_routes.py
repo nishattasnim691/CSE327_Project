@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from backend.patterns.facade.pharmacy_checkout_facade import (
+from patterns.facade.pharmacy_checkout_facade import (
     PharmacyCheckoutFacade,
 )
-from backend.patterns.observer.health_record import (
+from patterns.observer.health_record import (
     HealthRecord,
     VitalRecord,
 )
-from backend.patterns.observer.patient_dashboard_observer import (
+from patterns.observer.patient_dashboard_observer import (
     PatientDashboardObserver,
 )
-from backend.realtime.websocket_manager import websocket_manager
-from backend.schemas.member3_schemas import (
+from realtime.websocket_manager import websocket_manager
+from schemas.member3_schemas import (
     CheckoutRequestModel,
     VitalRecordModel,
 )

@@ -23,8 +23,6 @@ import {
   Workflow,
 } from "lucide-react";
 
-import PharmacyCheckoutFacade from "../patterns/facade/PharmacyCheckoutFacade";
-
 import type {
   PharmacyItem,
   PharmacyOrder,
@@ -48,9 +46,7 @@ const DELIVERY_FEE = 40;
 export default function CheckoutPage() {
   const navigate = useNavigate();
 
-  const [checkoutFacade] = useState(
-    () => new PharmacyCheckoutFacade()
-  );
+  
 
   const [
     prescription,
@@ -213,46 +209,64 @@ export default function CheckoutPage() {
       ""
     );
 
-    const result =
-      await checkoutFacade.checkout(
-        {
-          prescriptionId:
-            prescription.prescriptionId,
+    try {
+      const response =
+        await fetch("/api/checkout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prescriptionId:
+              prescription.prescriptionId,
 
-          patientId:
-            prescription.patientId,
+            patientId:
+              prescription.patientId,
 
-          address,
+            address,
 
-          items:
-            checkoutItems,
+            items:
+              checkoutItems,
 
-          deliveryFee:
-            DELIVERY_FEE,
-        }
+            deliveryFee:
+              DELIVERY_FEE,
+          }),
+        });
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        setPaymentState(
+          "failed"
+        );
+
+        setErrorMessage(
+          result.detail ||
+          "Checkout failed"
+        );
+
+        return;
+      }
+
+      setCreatedOrder(
+        result.order || result
       );
 
-    if (
-      !result.success
-    ) {
+      setPaymentState(
+        "success"
+      );
+    } catch (error) {
       setPaymentState(
         "failed"
       );
 
       setErrorMessage(
-        result.message
+        "Cannot connect to backend server"
       );
 
       return;
     }
-
-    setCreatedOrder(
-      result.order
-    );
-
-    setPaymentState(
-      "success"
-    );
 
     /*
       Temporary bridge for the
@@ -265,7 +279,7 @@ export default function CheckoutPage() {
     localStorage.setItem(
       "latestPharmacyOrder",
       JSON.stringify(
-        result.order
+        createdOrder
       )
     );
   }

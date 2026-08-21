@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime # 1. Import datetime to fix the calendar window
-from database_manager import DatabaseConnectionPool
+from backend.database.database_manager import DatabaseConnectionPool
 from offline_sync import OfflineSyncManager, SaveSymptomLogCommand # <-- AGILE: Import your Command Pattern!
 
 # Set up the visual page configuration
