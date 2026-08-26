@@ -15,15 +15,12 @@ export function connectToVitalUpdates(
   onVitals: (vitals: VitalRecordDto[]) => void,
   onConnectionChange?: (connected: boolean) => void
 ): () => void {
-  if (!isBackendConfigured()) {
+  if (!patientId || !isBackendConfigured()) {
     onConnectionChange?.(false);
     return () => undefined;
   }
 
-  const wsBase = API_BASE_URL.replace(
-    /^http/,
-    "ws"
-  );
+  const wsBase = API_BASE_URL.replace(/^http/, "ws");
 
   const socket = new WebSocket(
     `${wsBase}/ws/patients/${encodeURIComponent(patientId)}/vitals`
@@ -31,16 +28,12 @@ export function connectToVitalUpdates(
 
   socket.onopen = () => {
     onConnectionChange?.(true);
-
-    // The backend waits for incoming frames only to detect disconnects.
     socket.send("ready");
   };
 
   socket.onmessage = (event) => {
     try {
-      const data = JSON.parse(
-        event.data
-      ) as VitalsUpdatedEvent;
+      const data = JSON.parse(event.data) as VitalsUpdatedEvent;
 
       if (
         data.event === "vitals.updated" &&
@@ -50,7 +43,7 @@ export function connectToVitalUpdates(
         onVitals(data.vitals);
       }
     } catch {
-      // Ignore malformed prototype events.
+      console.error("Invalid websocket data");
     }
   };
 

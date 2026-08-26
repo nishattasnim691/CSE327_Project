@@ -1,8 +1,8 @@
 import { apiRequest } from "./ApiClient";
 
-export type ConsultationSender =
-  | "patient"
-  | "doctor";
+export type ConsultationSender = "patient" | "doctor";
+
+export type SharedChatMessage = ConsultationMessageDto;
 
 export type ConsultationMessageDto = {
   id: string;
@@ -11,36 +11,26 @@ export type ConsultationMessageDto = {
   text: string;
   time: string;
   createdAt: string;
-  pending?: boolean;
 };
 
-export type SendConsultationMessageRequest = {
-  sender: ConsultationSender;
-  text: string;
-};
-
-/*
-  Frontend API adapter.
-  Member 1 can persist messages and provide offline synchronization.
-  The UI should not implement the Command-pattern queue here.
-*/
-export async function fetchConsultationMessages(
-  patientId: string
-): Promise<ConsultationMessageDto[]> {
+export function fetchConsultationMessages(patientId: string) {
   return apiRequest<ConsultationMessageDto[]>(
-    `/api/patients/${encodeURIComponent(patientId)}/messages`
+    `/api/patients/${patientId}/messages`
   );
 }
 
-export async function sendConsultationMessage(
+export function sendConsultationMessage(
   patientId: string,
-  request: SendConsultationMessageRequest
-): Promise<ConsultationMessageDto> {
+  body: { sender: ConsultationSender; text: string }
+) {
   return apiRequest<ConsultationMessageDto>(
-    `/api/patients/${encodeURIComponent(patientId)}/messages`,
+    `/api/patients/${patientId}/messages`,
     {
       method: "POST",
-      body: JSON.stringify(request),
+      body: JSON.stringify(body)
     }
   );
 }
+
+
+export const getConsultationMessages = fetchConsultationMessages;

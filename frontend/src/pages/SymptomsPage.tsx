@@ -14,15 +14,11 @@ import {
   Stethoscope,
   UserRound,
 } from "lucide-react";
-
 import {
   submitTriage,
   type TriageResponse,
 } from "../services/api/TriageApi";
 
-import {
-  saveTriageSubmission,
-} from "../services/TriageStore";
 
 const COMMON_SYMPTOMS = [
   "Fever",
@@ -103,7 +99,7 @@ export default function SymptomsPage() {
       !description.trim()
     ) {
       setError(
-        "Select at least one demo symptom or enter a short description."
+        "Select at least one symptom or enter a short description."
       );
       return;
     }
@@ -125,9 +121,15 @@ export default function SymptomsPage() {
         MEMBER 2:
         Their TriageEngine evaluates the request and returns the category.
       */
+      const patientId = localStorage.getItem("patientId");
+
+      if (!patientId) {
+        throw new Error("Please log in as a patient before submitting symptoms.");
+      }
+
       const triageResult =
         await submitTriage({
-          patientId: "P001",
+          patientId,
           symptoms:
             selectedSymptoms,
           description:
@@ -135,42 +137,6 @@ export default function SymptomsPage() {
           duration:
             duration.trim(),
         });
-
-      const complaint =
-        selectedSymptoms.length >
-        0
-          ? selectedSymptoms.join(
-              ", "
-            )
-          : description.trim();
-
-      /*
-        For the current frontend prototype, TriageStore shares the
-        returned result with the Doctor Portal.
-
-        Member 1 can later replace this local bridge with database/API
-        persistence.
-      */
-      saveTriageSubmission({
-        patientId: "P001",
-        patientName:
-          "Synthetic Patient 001",
-        age: 32,
-        triage:
-          triageResult.category,
-        triageSource:
-          "backend",
-        complaint,
-        symptoms:
-          selectedSymptoms,
-        description:
-          description.trim(),
-        duration:
-          duration.trim(),
-        status: "Waiting",
-        submittedAt:
-          new Date().toISOString(),
-      });
 
       setResult(
         triageResult

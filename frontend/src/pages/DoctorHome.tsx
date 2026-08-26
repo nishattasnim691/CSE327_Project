@@ -27,11 +27,10 @@ import {
 } from "lucide-react";
 
 import {
-  addConsultationMessage,
-  getMessagesForPatient,
-  subscribeToConsultationMessages,
+  sendConsultationMessage,
+  getConsultationMessages,
   type SharedChatMessage,
-} from "../services/ConsultationMessageStore";
+} from "../services/api/ConsultationApi";
 
 import {
   savePrescription,
@@ -40,10 +39,6 @@ import {
 } from "../services/PrescriptionStore";
 
 import {
-  getTriageQueue,
-  subscribeToTriageQueue,
-  updateTriageCaseStatus,
-  type TriageCase,
   type TriageLevel,
 } from "../services/TriageStore";
 
@@ -54,6 +49,14 @@ import {
 import {
   connectToVitalUpdates,
 } from "../services/api/VitalsRealtime";
+
+import {
+  getPendingDoctorCases,
+  getAcceptedDoctorCases,
+  acceptDoctorCase,
+  type AcceptedDoctorCase,
+  type DoctorCase,
+} from "../services/api/DoctorApi";
 
 type VitalRecord = VitalRecordDto;
 
@@ -78,22 +81,12 @@ const EMPTY_MEDICINE: MedicineDraft = {
 };
 
 export default function DoctorHome() {
-  const [triageQueue, setTriageQueue] =
-    useState<TriageCase[]>(() =>
-      getTriageQueue()
-    );
 
   const [selectedPatientId, setSelectedPatientId] =
-    useState(() =>
-      getTriageQueue()[0]?.patientId ?? "P001"
-    );
+    useState("");
 
   const [messages, setMessages] =
-    useState<SharedChatMessage[]>(() =>
-      getMessagesForPatient(
-        getTriageQueue()[0]?.patientId ?? "P001"
-      )
-    );
+    useState<SharedChatMessage[]>([]);
 
   const [messageText, setMessageText] =
     useState("");
@@ -119,66 +112,44 @@ export default function DoctorHome() {
       null
     );
 
+ const [pendingCases, setPendingCases] =
+   useState<DoctorCase[]>([]);
+const [acceptedCases, setAcceptedCases] =
+  useState<AcceptedDoctorCase[]>([]);
   const selectedPatient = useMemo(
     () =>
-      triageQueue.find(
+      acceptedCases.find(
         (patient) =>
           patient.patientId === selectedPatientId
       ) ??
-      triageQueue[0] ??
+      acceptedCases[0] ??
+      pendingCases.find(
+        (patient) => patient.patientId === selectedPatientId
+      ) ??
+      pendingCases[0] ??
       null,
-    [selectedPatientId, triageQueue]
+    [selectedPatientId, acceptedCases, pendingCases]
   );
 
   useEffect(() => {
-    const refreshQueue = () => {
-      const updated = getTriageQueue();
-      setTriageQueue(updated);
+    if (!selectedPatientId) {
+      setMessages([]);
+      return;
+    }
 
-      setSelectedPatientId((current) => {
-        const stillExists =
-          updated.some(
-            (item) =>
-              item.patientId === current
-          );
-
-        return stillExists
-          ? current
-          : updated[0]?.patientId ??
-              "P001";
-      });
-    };
-
-    const unsubscribe =
-      subscribeToTriageQueue(
-        refreshQueue
+    getConsultationMessages(selectedPatientId)
+      .then(setMessages)
+      .catch((error) =>
+        console.error("Failed to load messages", error)
       );
-
-    refreshQueue();
-
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    const refreshMessages = () => {
-      setMessages(
-        getMessagesForPatient(
-          selectedPatientId
-        )
-      );
-    };
-
-    const unsubscribe =
-      subscribeToConsultationMessages(
-        refreshMessages
-      );
-
-    refreshMessages();
-
-    return unsubscribe;
   }, [selectedPatientId]);
 
   useEffect(() => {
+    if (!selectedPatientId) {
+      setLatestVital(null);
+      return;
+    }
+
     let active = true;
 
     const refreshLatest = (
@@ -223,16 +194,59 @@ export default function DoctorHome() {
     };
   }, [selectedPatientId]);
 
+useEffect(() => {
+  const loadCases = () => {
+    Promise.all([
+      getPendingDoctorCases(),
+      getAcceptedDoctorCases(),
+    ]).then(([pending, accepted]) => {
+      setPendingCases(pending);
+      setAcceptedCases(accepted);
+      setSelectedPatientId((current) =>
+        accepted.some((item) => item.patientId === current)
+          ? current
+          : accepted[0]?.patientId ?? pending[0]?.patientId ?? ""
+      );
+    }).catch((error) => {
+      console.error("Failed to load doctor cases", error);
+    });
+  };
+
+  loadCases();
+  const refreshTimer = window.setInterval(loadCases, 5000);
+
+  return () => window.clearInterval(refreshTimer);
+}, []);
+
+  async function handleAcceptCase(patientId: string) {
+    const storedUser = sessionStorage.getItem(
+      "virtualClinicCurrentUser"
+    );
+    const doctorId = storedUser
+      ? (JSON.parse(storedUser) as { userId?: string }).userId
+      : undefined;
+
+    if (!doctorId) {
+      console.error("Doctor identity is not available.");
+      return;
+    }
+
+    await acceptDoctorCase(patientId, doctorId);
+
+    setPendingCases((current) =>
+      current.filter((item) => item.patientId !== patientId)
+    );
+
+    const accepted = await getAcceptedDoctorCases();
+    setAcceptedCases(accepted);
+    setSelectedPatientId(patientId);
+  }
+
   function selectPatient(
     patientId: string
   ) {
     setSelectedPatientId(
       patientId
-    );
-
-    updateTriageCaseStatus(
-      patientId,
-      "In Review"
     );
 
     setIssuedPrescriptionId(
@@ -262,11 +276,23 @@ export default function DoctorHome() {
 
     if (!clean) return;
 
-    addConsultationMessage(
-      selectedPatientId,
-      "doctor",
-      clean
-    );
+    if (!acceptedCases.some((item) => item.patientId === selectedPatientId)) {
+      console.error("Cannot start a conversation before the case is accepted.");
+      return;
+    }
+
+   sendConsultationMessage(
+    selectedPatientId,
+    {
+        sender: "doctor",
+        text: clean
+    }
+)
+      .then(() => getConsultationMessages(selectedPatientId))
+      .then(setMessages)
+      .catch((error) =>
+        console.error("Failed to send message", error)
+      );
 
     setMessageText("");
   }
@@ -459,8 +485,21 @@ export default function DoctorHome() {
 
   if (!selectedPatient) {
     return (
-      <div className="min-h-screen bg-[#F4F7F6] p-8 text-[#12231F]">
-        No triage cases are available.
+      <div className="min-h-screen bg-[#F4F7F6] text-[#12231F]">
+        <header className="border-b border-white/10 bg-[#0F3D3E] px-6 py-5 text-white">
+          <div className="mx-auto flex max-w-[1500px] items-center gap-3">
+            <Stethoscope size={20} />
+            <h1 className="font-semibold">Remote Doctor Portal</h1>
+          </div>
+        </header>
+        <main className="mx-auto max-w-3xl px-6 py-16 text-center">
+          <h2 className="text-xl font-semibold text-[#29443D]">
+            No patient cases yet
+          </h2>
+          <p className="mt-2 text-sm text-[#81928C]">
+            Patient submissions will appear here after they submit their symptoms.
+          </p>
+        </main>
       </div>
     );
   }
@@ -503,6 +542,32 @@ export default function DoctorHome() {
       </header>
 
       <main className="mx-auto grid max-w-[1500px] gap-5 px-5 py-6 xl:grid-cols-[300px_1fr_390px]">
+        {/* DOCTOR PENDING CASES */}
+        <aside className="overflow-hidden rounded-2xl border border-[#D8E5E0] bg-white shadow-sm">
+          <div className="border-b border-[#E3ECE9] bg-[#F9FBFA] p-5">
+            <h2 className="font-semibold text-[#29443D]">Doctor Pending Cases</h2>
+          </div>
+          <div className="space-y-3 p-4">
+            {pendingCases.length === 0 ? (
+              <p className="text-sm text-[#81928C]">No pending patient cases</p>
+            ) : (
+              pendingCases.map((patient) => (
+                <div key={patient.patientId} className="rounded-xl border p-4">
+                  <p className="font-semibold">{patient.patientName}</p>
+                  <p className="text-xs text-[#81928C]">{patient.patientId}</p>
+                  <p className="mt-2 text-sm">Status: {patient.status}</p>
+                  <button
+                    onClick={() => handleAcceptCase(patient.patientId)}
+                    className="mt-3 rounded-lg bg-[#0F3D3E] px-4 py-2 text-sm text-white"
+                  >
+                    Accept Case
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
+
         {/* TRIAGE QUEUE */}
         <aside className="overflow-hidden rounded-2xl border border-[#D8E5E0] bg-white shadow-sm">
           <div className="border-b border-[#E3ECE9] bg-[#F9FBFA] p-5">
@@ -523,22 +588,21 @@ export default function DoctorHome() {
           </div>
 
           <div className="space-y-2 p-3">
-            {triageQueue.map(
-              (patient) => {
+            {acceptedCases.length === 0 ? (
+              <p className="text-sm text-[#81928C]">
+                No accepted patient cases
+              </p>
+            ) : (
+              acceptedCases.map((patient) => {
                 const active =
-                  patient.patientId ===
-                  selectedPatientId;
+                  patient.patientId === selectedPatientId;
 
                 return (
                   <button
-                    key={
-                      patient.patientId
-                    }
+                    key={patient.patientId}
                     type="button"
                     onClick={() =>
-                      selectPatient(
-                        patient.patientId
-                      )
+                      selectPatient(patient.patientId)
                     }
                     className={`w-full rounded-xl border p-4 text-left transition ${
                       active
@@ -546,65 +610,20 @@ export default function DoctorHome() {
                         : "border-transparent hover:border-[#D8E5E0] hover:bg-[#FAFCFB]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-[#29443D]">
-                          {
-                            patient.patientName
-                          }
-                        </p>
-
-                        <p className="mt-1 text-xs text-[#81928C]">
-                          {
-                            patient.patientId
-                          }{" "}
-                          · Age{" "}
-                          {
-                            patient.age
-                          }
-                        </p>
-                      </div>
-
-                      <TriageBadge
-                        level={
-                          patient.triage
-                        }
-                      />
-                    </div>
-
-                    <p className="mt-3 text-xs leading-5 text-[#667A73]">
-                      {
-                        patient.complaint
-                      }
+                    <p className="text-sm font-semibold text-[#29443D]">
+                      {patient.patientName}
                     </p>
 
-                    <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-[#81928C]">
-                      <span className="flex items-center gap-1.5">
-                        <Clock3
-                          size={13}
-                        />
-                        {
-                          patient.status
-                        }
-                      </span>
+                    <p className="mt-1 text-xs text-[#81928C]">
+                      {patient.patientId}
+                    </p>
 
-                      <span>
-                        {new Date(
-                          patient.submittedAt
-                        ).toLocaleTimeString(
-                          [],
-                          {
-                            hour:
-                              "2-digit",
-                            minute:
-                              "2-digit",
-                          }
-                        )}
-                      </span>
-                    </div>
+                    <p className="mt-2 text-sm">
+                      Status: {patient.status}
+                    </p>
                   </button>
                 );
-              }
+              })
             )}
           </div>
         </aside>
@@ -635,12 +654,10 @@ export default function DoctorHome() {
                 </p>
               </div>
 
-              <TriageBadge
-                level={
-                  selectedPatient.triage
-                }
-                large
-              />
+             <TriageBadge
+  level={selectedPatient.triage ?? "Routine"}
+  large
+/>
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -651,14 +668,11 @@ export default function DoctorHome() {
                   />
                 }
                 label="Submitted symptoms"
-                value={
-                  selectedPatient.symptoms.length >
-                  0
-                    ? selectedPatient.symptoms.join(
-                        ", "
-                      )
-                    : selectedPatient.complaint
-                }
+               value={
+  (selectedPatient.symptoms ?? []).length > 0
+    ? (selectedPatient.symptoms ?? []).join(", ")
+    : selectedPatient.complaint ?? "No complaint provided"
+}
               />
 
               <InfoCard
@@ -669,7 +683,7 @@ export default function DoctorHome() {
                 }
                 label="Duration"
                 value={
-                  selectedPatient.duration
+                  selectedPatient.duration ?? "Not provided"
                 }
               />
 

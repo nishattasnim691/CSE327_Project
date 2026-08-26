@@ -1,14 +1,19 @@
-from database.database_manager import DatabaseConnectionPool
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes.auth_routes import router as auth_router
 
+from routes.auth_routes import router as auth_router
+from routes import patient_routes
 from routes.member3_routes import router as member3_router
+from database.database_manager import DatabaseConnectionPool
+from routes import triage_routes
+from routes.doctor_routes import router as doctor_router
+
 
 app = FastAPI(
     title="Virtual Clinic System API",
     version="0.1.0",
 )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,16 +28,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(member3_router)
-app.include_router(auth_router)
 
+# Register API routers
+app.include_router(auth_router)
+app.include_router(member3_router)
+app.include_router(patient_routes.router)
+app.include_router(triage_routes.router)
+app.include_router(doctor_router)
 
 
 @app.get("/")
-async def root() -> dict:
+async def root():
     return {
         "message": "Virtual Clinic backend is running."
     }
+
+
 @app.get("/api/database-test")
 def database_test():
 

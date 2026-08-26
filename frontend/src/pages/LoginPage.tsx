@@ -46,38 +46,50 @@ export default function LoginPage() {
 
     setSubmitting(true);
 
-    try {
-      const user = await login({
-        email: email.trim(),
-        password,
-        role,
-      });
+    try { 
+  const user = await login({ 
+    email: email.trim(), 
+    password, 
+    role, 
+  }); 
 
-      if (user.token) {
-        sessionStorage.setItem(
-          "virtualClinicAuthToken",
-          user.token
-        );
-      }
 
-      sessionStorage.setItem(
-        "virtualClinicCurrentUser",
-        JSON.stringify(user)
-      );
+  // Save logged-in patient's ID for dashboard/profile API
+  // LoginResponse provides userId, not patientId.
+  if (user.role === "patient" && user.userId) {
+    localStorage.setItem(
+      "patientId",
+      user.userId
+    );
+  }
 
-      navigate(
-        user.role === "doctor"
-          ? "/doctor"
-          : "/kiosk"
-      );
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Login could not be completed."
-      );
-    } finally {
-      setSubmitting(false);
+  if (user.token) { 
+    sessionStorage.setItem( 
+      "virtualClinicAuthToken", 
+      user.token 
+    ); 
+  } 
+
+
+  sessionStorage.setItem( 
+    "virtualClinicCurrentUser", 
+    JSON.stringify(user) 
+  ); 
+
+  navigate( 
+    user.role === "doctor" 
+      ? "/doctor" 
+      : "/kiosk" 
+  ); 
+
+} catch (caughtError) { 
+  setError( 
+    caughtError instanceof Error 
+      ? caughtError.message 
+      : "Login could not be completed." 
+  ); 
+    } finally { 
+      setSubmitting(false); 
     }
   }
 

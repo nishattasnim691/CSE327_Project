@@ -42,6 +42,10 @@ import {
 import {
   connectToVitalUpdates,
 } from "../services/api/VitalsRealtime";
+import {
+  getPatientProfile,
+  type PatientProfile
+} from "../services/api/PatientApi";
 
 type VitalRecord = VitalRecordDto;
 
@@ -61,8 +65,6 @@ type MetricKey =
   | "systolic"
   | "diastolic"
   | "oxygen";
-
-const PATIENT_ID = "P001";
 
 const INITIAL_VITALS: VitalRecord[] = [
   {
@@ -132,7 +134,10 @@ const METRIC_META: Record<
   },
 };
 
+
 export default function PatientDashboardPage() {
+  const [patient, setPatient] =
+  useState<PatientProfile | null>(null);
   const [vitals, setVitals] =
     useState<VitalRecord[]>(
       INITIAL_VITALS
@@ -141,48 +146,56 @@ export default function PatientDashboardPage() {
   const [observerConnected, setObserverConnected] =
     useState(false);
 
+  const [patientId] = useState(() => localStorage.getItem("patientId"));
+
   useEffect(() => {
     let active = true;
 
-    fetchPatientVitals(
-      PATIENT_ID
-    )
+    if (!patientId) {
+      console.error("Patient ID missing");
+      return;
+    }
+
+    getPatientProfile(patientId)
+      .then((data) => {
+        if (active) {
+          setPatient(data);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+
+    fetchPatientVitals(patientId)
       .then((records) => {
-        if (
-          active &&
-          records.length > 0
-        ) {
+        if (active && records.length > 0) {
           setVitals(records);
         }
       })
       .catch(() => {
-        // Keep synthetic starter data visible until the backend is running.
+        console.log("Vitals loading failed");
       });
 
-    const disconnect =
-      connectToVitalUpdates(
-        PATIENT_ID,
-        (updatedVitals) => {
-          if (active) {
-            setVitals(
-              updatedVitals
-            );
-          }
-        },
-        (connected) => {
-          if (active) {
-            setObserverConnected(
-              connected
-            );
-          }
+    const disconnect = connectToVitalUpdates(
+      patientId,
+      (updatedVitals) => {
+        if (active) {
+          setVitals(updatedVitals);
         }
-      );
+      },
+      (connected) => {
+        if (active) {
+          setObserverConnected(connected);
+        }
+      }
+    );
 
     return () => {
       active = false;
       disconnect();
     };
-  }, []);
+
+  }, [patientId]);
 
   const [selectedMetric, setSelectedMetric] =
     useState<MetricKey>("heartRate");
@@ -196,7 +209,7 @@ export default function PatientDashboardPage() {
   const [message, setMessage] = useState("");
 
 
-  const latestVital = vitals[vitals.length - 1];
+  const latestVital = vitals[vitals.length - 1] ?? INITIAL_VITALS[0];
 
   const chartData = useMemo<ChartData<"line">>(() => {
     const meta = METRIC_META[selectedMetric];
@@ -304,14 +317,14 @@ export default function PatientDashboardPage() {
           -> this page and Doctor Portal update automatically.
       */
       await createPatientVital(
-        PATIENT_ID,
+        patientId ?? "",
         newRecord
       );
 
       if (!observerConnected) {
         const refreshed =
           await fetchPatientVitals(
-            PATIENT_ID
+            patientId ?? ""
           );
 
         setVitals(
@@ -335,7 +348,7 @@ export default function PatientDashboardPage() {
     try {
       const restored =
         await replacePatientVitals(
-          PATIENT_ID,
+          patientId ?? "",
           INITIAL_VITALS
         );
 
@@ -387,11 +400,10 @@ export default function PatientDashboardPage() {
           </div>
 
           <div
-            className={`ml-auto inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ${
-              observerConnected
+            className={`ml-auto inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ${observerConnected
                 ? "bg-emerald-400/10 text-emerald-200"
                 : "bg-amber-400/10 text-amber-200"
-            }`}
+              }`}
           >
             <Workflow size={14} />
             {observerConnected
@@ -457,6 +469,36 @@ export default function PatientDashboardPage() {
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {patient && (
+            <section className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
+
+              <h3 className="text-xl font-semibold">
+                Patient Information
+              </h3>
+
+
+              <div className="mt-4 grid grid-cols-2 gap-4">
+
+                <p>
+                  <b>Name:</b> {patient.name}
+                </p>
+
+                <p>
+                  <b>Age:</b> {patient.age}
+                </p>
+
+                <p>
+                  <b>Gender:</b> {patient.gender}
+                </p>
+
+                <p>
+                  <b>Blood Group:</b> {patient.bloodGroup}
+                </p>
+
+              </div>
+
+            </section>
+          )}
           <VitalCard
             icon={<HeartPulse size={20} />}
             label="Heart Rate"

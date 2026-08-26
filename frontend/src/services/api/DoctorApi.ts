@@ -1,0 +1,61 @@
+import { apiRequest } from "./ApiClient";
+
+
+export type DoctorCase = {
+    patientId: string;
+    patientName: string;
+    status: string;
+    triage?: "Critical" | "Urgent" | "Routine" | "Self-Care";
+    symptoms?: string[];
+    description?: string;
+    duration?: string;
+};
+
+
+export async function getPendingDoctorCases() {
+
+    return apiRequest<DoctorCase[]>(
+        "/api/doctor/pending-cases",
+        {
+            method: "GET"
+        }
+    );
+
+}
+
+
+export async function acceptDoctorCase(
+    patientId:string,
+    doctorId:string
+){
+
+    return apiRequest(
+        `/api/accept-doctor-case/${patientId}?doctor_id=${doctorId}`,
+        {
+            method:"PUT"
+        }
+    );
+
+}
+export interface AcceptedDoctorCase {
+  patientId: string;
+  patientName: string;
+  status: string;
+
+  age?: number;
+  triage?: "Critical" | "Urgent" | "Routine" | "Self-Care";
+  symptoms?: string[];
+  complaint?: string;
+  duration?: string;
+  description?: string;
+  triageSource?: string;
+  doctorName?: string;
+}
+export async function getAcceptedDoctorCases(): Promise<AcceptedDoctorCase[]> {
+    return apiRequest<AcceptedDoctorCase[]>(
+        "/api/doctor/accepted-cases",
+        {
+            method: "GET"
+        }
+    );
+}

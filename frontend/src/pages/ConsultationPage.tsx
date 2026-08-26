@@ -19,16 +19,23 @@ import {
   WifiOff,
 } from "lucide-react";
 
-import {
-  addConsultationMessage,
-  getMessagesForPatient,
-  subscribeToConsultationMessages,
-  type SharedChatMessage,
-} from "../services/ConsultationMessageStore";
+import { getPatientProfile, type PatientProfile } from "../services/api/PatientApi";
+import { getAcceptedDoctorCases } from "../services/api/DoctorApi";
 
-const PATIENT_ID = "P001";
+import {
+  getConsultationMessages,
+  sendConsultationMessage,
+  type ConsultationMessageDto,
+} from "../services/api/ConsultationApi";
+
+type SharedChatMessage = ConsultationMessageDto;
+
+const PATIENT_ID = localStorage.getItem("patientId") || "";
 
 export default function ConsultationPage() {
+  const [patient, setPatient] = useState<PatientProfile | null>(null);
+  const [doctorName, setDoctorName] = useState("Waiting for doctor");
+  const [consultationAccepted, setConsultationAccepted] = useState(false);
   const [online, setOnline] = useState(
     typeof navigator !== "undefined"
       ? navigator.onLine
@@ -36,10 +43,8 @@ export default function ConsultationPage() {
   );
 
   const [messages, setMessages] = useState<
-    SharedChatMessage[]
-  >(() =>
-    getMessagesForPatient(PATIENT_ID)
-  );
+  SharedChatMessage[]
+>([]);
 
   const [messageText, setMessageText] =
     useState("");
@@ -78,22 +83,46 @@ export default function ConsultationPage() {
   }, []);
 
   useEffect(() => {
-    const refreshMessages = () => {
-      setMessages(
-        getMessagesForPatient(
-          PATIENT_ID
-        )
-      );
-    };
+    if (!PATIENT_ID) return;
 
-    const unsubscribe =
-      subscribeToConsultationMessages(
-        refreshMessages
-      );
+    getAcceptedDoctorCases()
+      .then((cases) => {
+        const current = cases.find(
+          (item: any) => item.patientId === PATIENT_ID
+        );
 
-    refreshMessages();
+        if (current) {
+          setConsultationAccepted(true);
+          setDoctorName(current.doctorName ?? "Doctor");
+        }
+      })
+      .catch((error) => console.error(error));
 
-    return unsubscribe;
+    getConsultationMessages(PATIENT_ID)
+      .then((data) => {
+        setMessages(data);
+      })
+      .catch((error) => {
+        console.error(
+          "Failed to load consultation messages",
+          error
+        );
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!PATIENT_ID) {
+      console.error("Patient ID not found");
+      return;
+    }
+
+    getPatientProfile(PATIENT_ID)
+      .then((data) => {
+        setPatient(data);
+      })
+      .catch((error) => {
+        console.error("Failed to load patient profile", error);
+      });
   }, []);
 
   useEffect(() => {
@@ -114,12 +143,30 @@ export default function ConsultationPage() {
 
     if (!clean) return;
 
-    addConsultationMessage(
+    if (!consultationAccepted) {
+      alert("Please wait until a doctor accepts your case.");
+      return;
+    }
+
+    sendConsultationMessage(
       PATIENT_ID,
-      "patient",
-      clean,
-      !online
-    );
+      {
+        sender: "patient",
+        text: clean,
+      }
+    )
+      .then((newMessage) => {
+        setMessages((previous) => [
+          ...previous,
+          newMessage,
+        ]);
+      })
+      .catch((error) => {
+        console.error(
+          "Failed to send consultation message",
+          error
+        );
+      });
 
     setMessageText("");
   }
@@ -189,7 +236,7 @@ export default function ConsultationPage() {
 
               <div>
                 <h2 className="font-semibold text-[#223A34]">
-                  Dr. Sarah Ahmed
+                  {doctorName}
                 </h2>
 
                 <p className="mt-0.5 text-xs text-[#81928C]">
@@ -298,8 +345,30 @@ export default function ConsultationPage() {
                     />
                   }
                   label="Patient"
-                  value="Synthetic Patient 001"
+                  value={patient ? patient.name : "Loading..."}
                 />
+
+                {patient && (
+                  <>
+                    <InfoItem
+                      icon={<UserRound size={16} />}
+                      label="Age"
+                      value={`${patient.age} years`}
+                    />
+
+                    <InfoItem
+                      icon={<UserRound size={16} />}
+                      label="Gender"
+                      value={patient.gender}
+                    />
+
+                    <InfoItem
+                      icon={<ShieldCheck size={16} />}
+                      label="Blood Group"
+                      value={patient.bloodGroup}
+                    />
+                  </>
+                )}
 
                 <InfoItem
                   icon={
@@ -308,7 +377,7 @@ export default function ConsultationPage() {
                     />
                   }
                   label="Doctor"
-                  value="Dr. Sarah Ahmed"
+                  value="{doctorName}"
                 />
 
                 <InfoItem
@@ -318,7 +387,7 @@ export default function ConsultationPage() {
                     />
                   }
                   label="Status"
-                  value="In review"
+                  value={consultationAccepted ? "Accepted" : "Waiting for doctor"}
                 />
               </div>
             </div>
@@ -337,10 +406,10 @@ export default function ConsultationPage() {
               <p className="mt-3 text-sm leading-6 text-[#59736A]">
                 Messages sent here now
                 appear in the Remote
-                Doctor Portal for patient
-                P001, including when both
-                views are open in
-                separate browser tabs.
+                Doctor Portal for the logged-in
+                patient, including when both
+                views are open in separate
+                browser tabs.
               </p>
             </div>
           </aside>
@@ -415,18 +484,12 @@ function MessageBubble({
               <>
                 <span>·</span>
 
-                {message.pending ? (
-                  <span className="text-amber-600">
-                    Saved locally
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1">
-                    <CheckCheck
-                      size={12}
-                    />
-                    Sent
-                  </span>
-                )}
+                <span className="flex items-center gap-1">
+                  <CheckCheck
+                    size={12}
+                  />
+                  Sent
+                </span>
               </>
             )}
           </div>
