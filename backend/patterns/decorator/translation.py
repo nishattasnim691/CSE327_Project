@@ -1,0 +1,24 @@
+from .chat_interface import ChatInterface
+
+
+class TranslationDecorator(ChatInterface):
+
+    def __init__(self, chat, language="Bangla"):
+        self.chat = chat
+        self.language = language
+
+    def send_message(self, message):
+        message = self.chat.send_message(message)
+
+        if self.language == "Bangla":
+            translations = {
+                "high blood pressure": "উচ্চ রক্তচাপ",
+                "fever medicine": "জ্বরের ওষুধ",
+                "swelling": "ফোলা",
+                "breathing": "শ্বাস নেওয়া"
+            }
+
+            for english_word, bangla_word in translations.items():
+                message = message.replace(english_word, bangla_word)
+
+        return message
