@@ -29,14 +29,11 @@ import type {
 } from "../patterns/facade/types";
 
 import {
-  submitPharmacyCheckout,
-} from "../services/api/PharmacyApi";
-
-import {
   getPrescriptionForPatient,
   subscribeToPrescriptions,
   type DigitalPrescription,
 } from "../services/PrescriptionStore";
+import { submitPharmacyCheckout } from "../services/api/PharmacyApi";
 
 type PaymentState =
   | "idle"
@@ -44,7 +41,9 @@ type PaymentState =
   | "success"
   | "failed";
 
-const PATIENT_ID = "P001";
+const PATIENT_ID =
+  localStorage.getItem("patientId") ||
+  "P001";
 const DELIVERY_FEE = 40;
 
 export default function CheckoutPage() {
@@ -194,104 +193,95 @@ export default function CheckoutPage() {
       "processing" &&
     paymentState !==
       "success";
+async function handleCheckout() {
 
-  async function handleCheckout() {
-    if (
-      !canCheckout ||
-      !prescription
-    ) {
-      return;
+  if (
+    !canCheckout ||
+    !prescription
+  ) {
+    return;
+  }
+
+
+  setPaymentState(
+    "processing"
+  );
+
+
+  setErrorMessage("");
+
+
+
+  try {
+
+
+    const result =
+      await submitPharmacyCheckout({
+        prescriptionId:
+          prescription.prescriptionId,
+        patientId:
+          prescription.patientId,
+        address,
+        items: checkoutItems,
+        deliveryFee: DELIVERY_FEE,
+      });
+
+
+
+    if (!result.success) {
+
+      throw new Error(
+        result.message ||
+        "Checkout failed"
+      );
+
     }
 
-    setPaymentState(
-      "processing"
-    );
 
-    setErrorMessage(
-      ""
-    );
 
-    let result;
+    const order =
+      result.order ||
+      result;
 
-    try {
-      /*
-        OFFICIAL PYTHON FACADE FLOW:
-        React CheckoutPage
-          -> POST /api/checkout
-          -> Python PharmacyCheckoutFacade.checkout()
-          -> InventoryService
-          -> PaymentService
-          -> OrderService
-      */
-      result =
-        await submitPharmacyCheckout(
-          {
-            prescriptionId:
-              prescription.prescriptionId,
 
-            patientId:
-              prescription.patientId,
-
-            address,
-
-            items:
-              checkoutItems,
-
-            deliveryFee:
-              DELIVERY_FEE,
-          }
-        );
-    } catch (error) {
-      setPaymentState(
-        "failed"
-      );
-
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Python checkout service is unavailable."
-      );
-
-      return;
-    }
-
-    if (
-      !result.success
-    ) {
-      setPaymentState(
-        "failed"
-      );
-
-      setErrorMessage(
-        result.message
-      );
-
-      return;
-    }
 
     setCreatedOrder(
-      result.order
+      order
     );
+
 
     setPaymentState(
       "success"
     );
 
-    /*
-      Temporary bridge for the
-      current frontend prototype.
 
-      OrderTrackingPage reads this
-      order until the shared backend
-      order service is connected.
-    */
+
     localStorage.setItem(
       "latestPharmacyOrder",
-      JSON.stringify(
-        result.order
-      )
+      JSON.stringify(order)
     );
+
+
+
+  } catch(error) {
+
+
+    setPaymentState(
+      "failed"
+    );
+
+
+    setErrorMessage(
+      error instanceof Error
+      ? error.message
+      : "Backend connection failed"
+    );
+
+
   }
+
+}
+
 
   if (!prescription) {
     return (

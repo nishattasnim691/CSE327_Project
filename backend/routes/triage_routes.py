@@ -7,6 +7,12 @@ from pydantic import BaseModel
 
 from database.database_manager import DatabaseConnectionPool
 
+# Chain of Responsibility imports
+from patterns.chain.critical_emergency_check import CriticalEmergencyCheck
+from patterns.chain.urgent_care_check import UrgentCareCheck
+from patterns.chain.routine_check import RoutineCheck
+
+
 router = APIRouter()
 
 
@@ -17,22 +23,41 @@ class TriageRequest(BaseModel):
     duration: str
 
 
+def run_triage_engine(
+    symptoms: list[str],
+    description: str = "",
+) -> str:
+    """
+    Chain of Responsibility:
+    Critical -> Urgent -> Routine -> Self-Care
+    """
+
+    triage_chain = CriticalEmergencyCheck()
+
+    triage_chain \
+        .set_next(UrgentCareCheck()) \
+        .set_next(RoutineCheck())
+
+    symptom_text = " ".join(
+        [*symptoms, description]
+    )
+
+    return triage_chain.handle(symptom_text)
+
+
 @router.post("/api/triage")
 def submit_triage(request: TriageRequest):
 
-    text = " ".join(request.symptoms).lower()
-
-    if "chest pain" in text or "breathing" in text:
-        category = "Critical"
-
-    elif "fever" in text:
-        category = "Routine"
-
-    else:
-        category = "Self-Care"
+    # Use Chain of Responsibility instead of temporary if/else logic
+    category = run_triage_engine(
+        request.symptoms,
+        request.description,
+    )
 
     db = DatabaseConnectionPool()
+
     submitted_at = datetime.now(timezone.utc).isoformat()
+
     existing_case = db.execute_query(
         "SELECT CaseID FROM TriageCases WHERE PatientID = ?",
         (request.patientId,),
@@ -42,8 +67,12 @@ def submit_triage(request: TriageRequest):
         db.execute_query(
             """
             UPDATE TriageCases
-            SET Symptoms = ?, Description = ?, Duration = ?, Category = ?,
-                SubmittedAt = ?, Status = 'Waiting'
+            SET Symptoms = ?,
+                Description = ?,
+                Duration = ?,
+                Category = ?,
+                SubmittedAt = ?,
+                Status = 'Waiting'
             WHERE PatientID = ?
             """,
             (
@@ -55,11 +84,20 @@ def submit_triage(request: TriageRequest):
                 request.patientId,
             ),
         )
+
     else:
         db.execute_query(
             """
             INSERT INTO TriageCases
-            (CaseID, PatientID, Symptoms, Description, Duration, Category, SubmittedAt)
+            (
+                CaseID,
+                PatientID,
+                Symptoms,
+                Description,
+                Duration,
+                Category,
+                SubmittedAt
+            )
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -73,28 +111,52 @@ def submit_triage(request: TriageRequest):
             ),
         )
 
+
     existing_assignment = db.execute_query(
         "SELECT AssignmentID FROM DoctorAssignments WHERE PatientID = ?",
         (request.patientId,),
     )
 
+
     if existing_assignment:
+
         db.execute_query(
             """
             UPDATE DoctorAssignments
-            SET DoctorID = 'unassigned', AssignedAt = ?, Status = 'Pending'
+            SET DoctorID = 'unassigned',
+                AssignedAt = ?,
+                Status = 'Pending'
             WHERE PatientID = ?
             """,
-            (submitted_at, request.patientId),
+            (
+                submitted_at,
+                request.patientId,
+            ),
         )
+
     else:
+
         db.execute_query(
             """
             INSERT INTO DoctorAssignments
-            (AssignmentID, DoctorID, PatientID, AssignedAt, Status)
+            (
+                AssignmentID,
+                DoctorID,
+                PatientID,
+                AssignedAt,
+                Status
+            )
             VALUES (?, 'unassigned', ?, ?, 'Pending')
             """,
-            (str(uuid.uuid4()), request.patientId, submitted_at),
+            (
+                str(uuid.uuid4()),
+                request.patientId,
+                submitted_at,
+            ),
         )
 
-    return {"category": category}
+
+    return {
+        "category": category,
+        "message": "Triage submitted successfully"
+    }

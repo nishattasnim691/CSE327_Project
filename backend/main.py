@@ -7,6 +7,7 @@ from routes.member3_routes import router as member3_router
 from database.database_manager import DatabaseConnectionPool
 from routes import triage_routes
 from routes.doctor_routes import router as doctor_router
+from routes import pharmacy_routes
 
 
 app = FastAPI(
@@ -14,19 +15,12 @@ app = FastAPI(
     version="0.1.0",
 )
 
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+]
 
 
 # Register API routers
@@ -35,7 +29,7 @@ app.include_router(member3_router)
 app.include_router(patient_routes.router)
 app.include_router(triage_routes.router)
 app.include_router(doctor_router)
-
+app.include_router(pharmacy_routes.router)
 
 @app.get("/")
 async def root():
@@ -57,3 +51,12 @@ def database_test():
         "status": "Database connected",
         "tables": tables
     }
+
+
+app = CORSMiddleware(
+    app=app,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

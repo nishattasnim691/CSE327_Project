@@ -1,4 +1,5 @@
 import sqlite3
+from threading import RLock
 
 
 class DatabaseConnectionPool:
@@ -11,6 +12,7 @@ class DatabaseConnectionPool:
 
     def __init__(self):
         if not hasattr(self, "connection"):
+            self._lock = RLock()
             self.connection = sqlite3.connect(
                 "virtual_clinic.db",
                 check_same_thread=False
@@ -19,10 +21,11 @@ class DatabaseConnectionPool:
             self._create_tables()
 
     def execute_query(self, query, params=()):
-        cursor = self.connection.cursor()
-        cursor.execute(query, params)
-        self.connection.commit()
-        return cursor.fetchall()
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(query, params)
+            self.connection.commit()
+            return cursor.fetchall()
 
     def _create_tables(self):
 
@@ -81,5 +84,35 @@ class DatabaseConnectionPool:
             Status TEXT DEFAULT 'Pending'
         )
         """)
-
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS PatientVitals(
+            VitalID TEXT PRIMARY KEY,
+            PatientID TEXT NOT NULL,
+            HeartRate INTEGER NOT NULL,
+            Temperature REAL NOT NULL,
+            Systolic INTEGER NOT NULL,
+            Diastolic INTEGER NOT NULL,
+            Oxygen INTEGER NOT NULL,
+            RecordedAt TEXT NOT NULL
+        )
+        """)
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS PharmacyOrders(
+            OrderID TEXT PRIMARY KEY,
+            PatientID TEXT NOT NULL,
+            Medicine TEXT NOT NULL,
+            Quantity INTEGER NOT NULL,
+            Status TEXT NOT NULL,
+            Total REAL NOT NULL,
+            CreatedAt TEXT NOT NULL
+        )
+        """)
+        self.cursor.execute("""
+CREATE TABLE IF NOT EXISTS Dispatchers(
+    DispatcherID TEXT PRIMARY KEY,
+    Name TEXT NOT NULL,
+    Email TEXT UNIQUE NOT NULL,
+    Password TEXT NOT NULL
+)
+""")
         self.connection.commit()

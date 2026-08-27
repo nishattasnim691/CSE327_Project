@@ -5,16 +5,16 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Activity,
-  ArrowLeft,
   CheckCircle2,
   Clock3,
   FileText,
   Droplets,
   Gauge,
   HeartPulse,
+  LogOut,
   MessageCircle,
   MinusCircle,
   Plus,
@@ -54,6 +54,7 @@ import {
   getPendingDoctorCases,
   getAcceptedDoctorCases,
   acceptDoctorCase,
+  completeDoctorCase,
   type AcceptedDoctorCase,
   type DoctorCase,
 } from "../services/api/DoctorApi";
@@ -82,6 +83,21 @@ const EMPTY_MEDICINE: MedicineDraft = {
 
 export default function DoctorHome() {
 
+  const navigate = useNavigate();
+
+  const storedUser = sessionStorage.getItem(
+    "virtualClinicCurrentUser"
+  );
+  const doctor = storedUser
+    ? (JSON.parse(storedUser) as {
+        userId?: string;
+        name?: string;
+        email?: string;
+        licenseNumber?: string;
+        specialty?: string;
+      })
+    : {};
+
   const [selectedPatientId, setSelectedPatientId] =
     useState("");
 
@@ -90,6 +106,10 @@ export default function DoctorHome() {
 
   const [messageText, setMessageText] =
     useState("");
+  const [simplifyMessages, setSimplifyMessages] =
+    useState(true);
+  const [messageLanguage, setMessageLanguage] =
+    useState<"English" | "Bangla">("English");
 
   const [prescriptionNote, setPrescriptionNote] =
     useState(
@@ -116,6 +136,21 @@ export default function DoctorHome() {
    useState<DoctorCase[]>([]);
 const [acceptedCases, setAcceptedCases] =
   useState<AcceptedDoctorCase[]>([]);
+  const uniqueAcceptedCases = acceptedCases.filter(
+  (item, index, self) =>
+    index ===
+    self.findIndex(
+      (x) => x.patientId === item.patientId
+    )
+);
+
+const uniquePendingCases = pendingCases.filter(
+  (item, index, self) =>
+    index ===
+    self.findIndex(
+      (x) => x.patientId === item.patientId
+    )
+);
   const selectedPatient = useMemo(
     () =>
       acceptedCases.find(
@@ -123,10 +158,6 @@ const [acceptedCases, setAcceptedCases] =
           patient.patientId === selectedPatientId
       ) ??
       acceptedCases[0] ??
-      pendingCases.find(
-        (patient) => patient.patientId === selectedPatientId
-      ) ??
-      pendingCases[0] ??
       null,
     [selectedPatientId, acceptedCases, pendingCases]
   );
@@ -198,7 +229,7 @@ useEffect(() => {
   const loadCases = () => {
     Promise.all([
       getPendingDoctorCases(),
-      getAcceptedDoctorCases(),
+      getAcceptedDoctorCases(doctor.userId ?? ""),
     ]).then(([pending, accepted]) => {
       setPendingCases(pending);
       setAcceptedCases(accepted);
@@ -216,15 +247,10 @@ useEffect(() => {
   const refreshTimer = window.setInterval(loadCases, 5000);
 
   return () => window.clearInterval(refreshTimer);
-}, []);
+}, [doctor.userId]);
 
   async function handleAcceptCase(patientId: string) {
-    const storedUser = sessionStorage.getItem(
-      "virtualClinicCurrentUser"
-    );
-    const doctorId = storedUser
-      ? (JSON.parse(storedUser) as { userId?: string }).userId
-      : undefined;
+    const doctorId = doctor.userId;
 
     if (!doctorId) {
       console.error("Doctor identity is not available.");
@@ -237,9 +263,15 @@ useEffect(() => {
       current.filter((item) => item.patientId !== patientId)
     );
 
-    const accepted = await getAcceptedDoctorCases();
+    const accepted = await getAcceptedDoctorCases(doctorId);
     setAcceptedCases(accepted);
     setSelectedPatientId(patientId);
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem("virtualClinicAuthToken");
+    sessionStorage.removeItem("virtualClinicCurrentUser");
+    navigate("/login", { replace: true });
   }
 
   function selectPatient(
@@ -276,7 +308,9 @@ useEffect(() => {
 
     if (!clean) return;
 
-    if (!acceptedCases.some((item) => item.patientId === selectedPatientId)) {
+    if (!uniqueAcceptedCases.some(
+(item) => item.patientId === selectedPatientId
+)) {
       console.error("Cannot start a conversation before the case is accepted.");
       return;
     }
@@ -285,7 +319,9 @@ useEffect(() => {
     selectedPatientId,
     {
         sender: "doctor",
-        text: clean
+      text: clean,
+      simplify: simplifyMessages,
+      language: messageLanguage,
     }
 )
       .then(() => getConsultationMessages(selectedPatientId))
@@ -366,7 +402,7 @@ useEffect(() => {
     );
   }
 
-  function issuePrescription() {
+  async function issuePrescription() {
     if (!selectedPatient) {
       return;
     }
@@ -474,9 +510,29 @@ useEffect(() => {
         prescriptionMedicines,
     };
 
-    savePrescription(
-      prescription
-    );
+    if (!doctor.userId) {
+      setPrescriptionError("Doctor identity is not available.");
+      return;
+    }
+
+    try {
+      await completeDoctorCase(
+        selectedPatient.patientId,
+        doctor.userId
+      );
+      savePrescription(prescription);
+      setAcceptedCases((current) =>
+        current.filter((item) => item.patientId !== selectedPatient.patientId)
+      );
+      setSelectedPatientId("");
+    } catch (error) {
+      setPrescriptionError(
+        error instanceof Error
+          ? error.message
+          : "The case could not be completed."
+      );
+      return;
+    }
 
     setIssuedPrescriptionId(
       prescription.prescriptionId
@@ -489,16 +545,51 @@ useEffect(() => {
         <header className="border-b border-white/10 bg-[#0F3D3E] px-6 py-5 text-white">
           <div className="mx-auto flex max-w-[1500px] items-center gap-3">
             <Stethoscope size={20} />
-            <h1 className="font-semibold">Remote Doctor Portal</h1>
+            <div>
+              <h1 className="font-semibold">Remote Doctor Portal</h1>
+              <p className="text-xs text-[#8FB9AE]">
+                {doctor.name ?? "Doctor"} · {doctor.specialty ?? "General"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="ml-auto inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#D7EBE6] transition hover:bg-white/10"
+            >
+              <LogOut size={17} />
+              Logout
+            </button>
           </div>
         </header>
         <main className="mx-auto max-w-3xl px-6 py-16 text-center">
+          <div className="mb-8 grid gap-3 text-left sm:grid-cols-3">
+            <InfoCard icon={<UserRound size={18} />} label="Doctor" value={doctor.name ?? "Not available"} />
+            <InfoCard icon={<ShieldCheck size={18} />} label="License" value={doctor.licenseNumber ?? "Not available"} />
+            <InfoCard icon={<Activity size={18} />} label="Case summary" value={`${uniquePendingCases.length} pending · ${uniqueAcceptedCases.length} active`} />
+          </div>
           <h2 className="text-xl font-semibold text-[#29443D]">
-            No patient cases yet
+            Select an accepted case to begin
           </h2>
           <p className="mt-2 text-sm text-[#81928C]">
-            Patient submissions will appear here after they submit their symptoms.
+            Pending cases must be accepted before patient review, messages, and prescription tools become available.
           </p>
+          {uniquePendingCases.length > 0 && (
+            <div className="mx-auto mt-8 max-w-md space-y-3 text-left">
+              {uniquePendingCases.map((patient) => (
+                <div key={patient.patientId} className="rounded-xl border border-[#D8E5E0] bg-white p-4 shadow-sm">
+                  <p className="font-semibold text-[#29443D]">{patient.patientName}</p>
+                  <p className="text-xs text-[#81928C]">{patient.patientId}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleAcceptCase(patient.patientId)}
+                    className="mt-3 rounded-lg bg-[#0F3D3E] px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Accept Case
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </main>
       </div>
     );
@@ -508,13 +599,14 @@ useEffect(() => {
     <div className="min-h-screen bg-[#F4F7F6] text-[#12231F]">
       <header className="border-b border-white/10 bg-[#0F3D3E] text-white">
         <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-4 px-6 py-4">
-          <Link
-            to="/kiosk"
+          <button
+            type="button"
+            onClick={handleLogout}
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#D7EBE6] transition hover:bg-white/10"
           >
-            <ArrowLeft size={18} />
-            Patient Kiosk
-          </Link>
+            <LogOut size={18} />
+            Logout
+          </button>
 
           <div className="hidden h-6 w-px bg-white/20 sm:block" />
 
@@ -525,11 +617,11 @@ useEffect(() => {
 
             <div>
               <h1 className="font-semibold">
-                Remote Doctor Portal
+                {doctor.name ?? "Remote Doctor Portal"}
               </h1>
 
               <p className="text-xs text-[#8FB9AE]">
-                Virtual Clinic · Physician Workspace
+                {doctor.email ?? "Physician Workspace"}
               </p>
             </div>
           </div>
@@ -551,10 +643,23 @@ useEffect(() => {
             {pendingCases.length === 0 ? (
               <p className="text-sm text-[#81928C]">No pending patient cases</p>
             ) : (
-              pendingCases.map((patient) => (
+             uniquePendingCases.map((patient) => (
                 <div key={patient.patientId} className="rounded-xl border p-4">
-                  <p className="font-semibold">{patient.patientName}</p>
-                  <p className="text-xs text-[#81928C]">{patient.patientId}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{patient.patientName}</p>
+                      <p className="text-xs text-[#81928C]">{patient.patientId}</p>
+                    </div>
+                    <TriageBadge level={patient.triage ?? "Routine"} />
+                  </div>
+                  <p className="mt-3 text-sm text-[#536861]">
+                    {(patient.symptoms ?? []).length > 0
+                      ? patient.symptoms?.join(", ")
+                      : patient.description ?? "No symptoms provided"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#81928C]">
+                    Duration: {patient.duration ?? "Not provided"}
+                  </p>
                   <p className="mt-2 text-sm">Status: {patient.status}</p>
                   <button
                     onClick={() => handleAcceptCase(patient.patientId)}
@@ -588,12 +693,12 @@ useEffect(() => {
           </div>
 
           <div className="space-y-2 p-3">
-            {acceptedCases.length === 0 ? (
+            {uniqueAcceptedCases.length === 0? (
               <p className="text-sm text-[#81928C]">
                 No accepted patient cases
               </p>
             ) : (
-              acceptedCases.map((patient) => {
+              uniqueAcceptedCases.map((patient) => {
                 const active =
                   patient.patientId === selectedPatientId;
 
@@ -631,6 +736,11 @@ useEffect(() => {
         {/* REVIEW + CHAT */}
         <section className="space-y-5">
           <div className="rounded-2xl border border-[#D8E5E0] bg-white p-6 shadow-sm">
+            <div className="mb-5 grid gap-3 sm:grid-cols-3">
+              <InfoCard icon={<UserRound size={18} />} label="Doctor" value={doctor.name ?? "Not available"} />
+              <InfoCard icon={<ShieldCheck size={18} />} label="License" value={doctor.licenseNumber ?? "Not available"} />
+              <InfoCard icon={<Activity size={18} />} label="Case summary" value={`${uniquePendingCases.length} pending · ${uniqueAcceptedCases.length} active`} />
+            </div>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1B7A6B]">
@@ -863,6 +973,31 @@ useEffect(() => {
                 >
                   <Send size={18} />
                 </button>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[#59736A]">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={simplifyMessages}
+                    onChange={(event) => setSimplifyMessages(event.target.checked)}
+                    className="accent-[#1B7A6B]"
+                  />
+                  Simplify medical terms
+                </label>
+                <label className="flex items-center gap-2">
+                  Language
+                  <select
+                    value={messageLanguage}
+                    onChange={(event) =>
+                      setMessageLanguage(event.target.value as "English" | "Bangla")
+                    }
+                    className="rounded-md border border-[#CCDCD6] bg-white px-2 py-1 text-xs text-[#29443D]"
+                  >
+                    <option value="English">English</option>
+                    <option value="Bangla">Bangla</option>
+                  </select>
+                </label>
               </div>
             </form>
           </div>

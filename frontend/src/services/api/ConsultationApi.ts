@@ -21,7 +21,12 @@ export function fetchConsultationMessages(patientId: string) {
 
 export function sendConsultationMessage(
   patientId: string,
-  body: { sender: ConsultationSender; text: string }
+  body: {
+    sender: ConsultationSender;
+    text: string;
+    simplify?: boolean;
+    language?: "English" | "Bangla";
+  }
 ) {
   return apiRequest<ConsultationMessageDto>(
     `/api/patients/${patientId}/messages`,

@@ -1,22 +1,12 @@
-from __future__ import annotations
-
+from patterns.observer.doctor_dashboard_observer import DoctorDashboardObserver
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-
-from patterns.facade.pharmacy_checkout_facade import (
-    PharmacyCheckoutFacade,
-)
-from patterns.observer.health_record import (
-    HealthRecord,
-    VitalRecord,
-)
-from patterns.observer.patient_dashboard_observer import (
-    PatientDashboardObserver,
-)
+from database.database_manager import DatabaseConnectionPool
+from patterns.facade.pharmacy_checkout_facade import PharmacyCheckoutFacade
+from patterns.observer.health_record import HealthRecord, VitalRecord
+from patterns.observer.patient_dashboard_observer import PatientDashboardObserver
 from realtime.websocket_manager import websocket_manager
-from schemas.member3_schemas import (
-    CheckoutRequestModel,
-    VitalRecordModel,
-)
+from schemas.member3_schemas import CheckoutRequestModel, VitalRecordModel
+import uuid
 
 router = APIRouter()
 
@@ -25,30 +15,60 @@ checkout_facade = PharmacyCheckoutFacade()
 _health_records: dict[str, HealthRecord] = {}
 
 
-def get_health_record(
-    patient_id: str,
-) -> HealthRecord:
-    """
-    Return one in-memory HealthRecord subject per patient.
+def get_health_record(patient_id: str) -> HealthRecord:
 
-    Member 1 can later replace this registry with database persistence.
-    The Observer classes do not need to change.
-    """
     if patient_id not in _health_records:
-        health_record = HealthRecord(patient_id)
 
-        dashboard_observer = PatientDashboardObserver(
+        db = DatabaseConnectionPool()
+
+        rows = db.execute_query(
+            """
+            SELECT VitalID, HeartRate, Temperature,
+                   Systolic, Diastolic, Oxygen, RecordedAt
+            FROM PatientVitals
+            WHERE PatientID = ?
+            ORDER BY RecordedAt ASC
+            """,
+            (patient_id,),
+        )
+
+        existing_vitals = [
+            VitalRecord(
+                id=index,
+                recorded_at=row[6],
+                heart_rate=row[1],
+                temperature=row[2],
+                systolic=row[3],
+                diastolic=row[4],
+                oxygen=row[5],
+            )
+            for index, row in enumerate(rows)
+        ]
+
+
+        health_record = HealthRecord(
+            patient_id,
+            existing_vitals
+        )
+
+
+        patient_observer = PatientDashboardObserver(
             websocket_manager
         )
 
-        health_record.attach(
-            dashboard_observer
+        doctor_observer = DoctorDashboardObserver(
+            websocket_manager
         )
+
+
+        health_record.attach(patient_observer)
+        health_record.attach(doctor_observer)
+
 
         _health_records[patient_id] = health_record
 
-    return _health_records[patient_id]
 
+    return _health_records[patient_id]
 
 @router.get("/api/member3/health")
 async def member3_health() -> dict:
@@ -66,9 +86,6 @@ async def member3_health() -> dict:
 async def checkout(
     request: CheckoutRequestModel,
 ) -> dict:
-    """
-    React CheckoutPage -> this endpoint -> Python Facade.
-    """
     return await checkout_facade.checkout(request)
 
 
@@ -76,11 +93,31 @@ async def checkout(
 async def get_patient_vitals(
     patient_id: str,
 ) -> list[dict]:
-    health_record = get_health_record(patient_id)
+
+    db = DatabaseConnectionPool()
+
+    rows = db.execute_query(
+        """
+        SELECT VitalID, HeartRate, Temperature,
+               Systolic, Diastolic, Oxygen, RecordedAt
+        FROM PatientVitals
+        WHERE PatientID = ?
+        ORDER BY RecordedAt ASC
+        """,
+        (patient_id,),
+    )
 
     return [
-        vital.to_frontend_dict()
-        for vital in health_record.get_vitals()
+        {
+            "id": row[0],
+            "heartRate": row[1],
+            "temperature": row[2],
+            "systolic": row[3],
+            "diastolic": row[4],
+            "oxygen": row[5],
+            "recordedAt": row[6],
+        }
+        for row in rows
     ]
 
 
@@ -89,15 +126,36 @@ async def add_patient_vital(
     patient_id: str,
     body: VitalRecordModel,
 ) -> dict:
-    """
-    React logs a vital.
 
-    HealthRecord.add_vital()
-        -> HealthRecord.notify()
-        -> PatientDashboardObserver.update()
-        -> WebSocket event
-        -> React chart/doctor view updates.
-    """
+    db = DatabaseConnectionPool()
+
+    db.execute_query(
+        """
+        INSERT INTO PatientVitals
+        (
+            VitalID,
+            PatientID,
+            HeartRate,
+            Temperature,
+            Systolic,
+            Diastolic,
+            Oxygen,
+            RecordedAt
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            str(uuid.uuid4()),
+            patient_id,
+            body.heart_rate,
+            body.temperature,
+            body.systolic,
+            body.diastolic,
+            body.oxygen,
+            body.recorded_at,
+        ),
+    )
+
     health_record = get_health_record(patient_id)
 
     vital = VitalRecord(
@@ -120,12 +178,45 @@ async def replace_patient_vitals(
     patient_id: str,
     body: list[VitalRecordModel],
 ) -> list[dict]:
-    """
-    Demo reset/replace endpoint.
 
-    replace_vitals() also calls notify(), so the same Python Observer
-    pipeline refreshes every connected dashboard.
-    """
+    db = DatabaseConnectionPool()
+
+    db.execute_query(
+        """
+        DELETE FROM PatientVitals
+        WHERE PatientID = ?
+        """,
+        (patient_id,),
+    )
+
+    for item in body:
+        db.execute_query(
+            """
+            INSERT INTO PatientVitals
+            (
+                VitalID,
+                PatientID,
+                HeartRate,
+                Temperature,
+                Systolic,
+                Diastolic,
+                Oxygen,
+                RecordedAt
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                patient_id,
+                item.heart_rate,
+                item.temperature,
+                item.systolic,
+                item.diastolic,
+                item.oxygen,
+                item.recorded_at,
+            ),
+        )
+
     health_record = get_health_record(patient_id)
 
     vitals = [
@@ -149,13 +240,12 @@ async def replace_patient_vitals(
     ]
 
 
-@router.websocket(
-    "/ws/patients/{patient_id}/vitals"
-)
+@router.websocket("/ws/patients/{patient_id}/vitals")
 async def patient_vitals_socket(
     websocket: WebSocket,
     patient_id: str,
 ) -> None:
+
     await websocket_manager.connect(
         patient_id,
         websocket,
@@ -163,13 +253,10 @@ async def patient_vitals_socket(
 
     try:
         while True:
-            # The client does not need to send meaningful data.
-            # Waiting here keeps the socket alive and detects disconnects.
             await websocket.receive_text()
+
     except WebSocketDisconnect:
         websocket_manager.disconnect(
             patient_id,
             websocket,
         )
-
-        

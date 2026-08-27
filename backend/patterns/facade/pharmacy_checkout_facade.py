@@ -52,10 +52,10 @@ class PharmacyCheckoutFacade:
                 ),
             }
 
-        if len(request.address.strip()) < 8:
+        if len(request.address.strip()) < 3:
             return {
                 "success": False,
-                "message": "Please enter a complete delivery address.",
+                "message": "Please enter a valid delivery address.",
             }
 
         if not request.items:

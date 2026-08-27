@@ -15,17 +15,18 @@ import PrescriptionPage from "./pages/PrescriptionPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import OrderTrackingPage from "./pages/OrderTrackingPage";
 import PatientDashboardPage from "./pages/PatientDashboardPage";
+import DispatcherDashboard from "./pages/DispatcherDashboard";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-      <Route path="/login" element={<LoginPage />} />
-<Route path="/signup" element={<SignupPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route
-  path="/"
-  element={<Navigate to="/login" replace />}
-/>
+          path="/"
+          element={<Navigate to="/login" replace />}
+        />
 
         <Route path="/kiosk" element={<KioskHome />} />
         <Route path="/kiosk/symptoms" element={<SymptomsPage />} />
@@ -37,6 +38,10 @@ function App() {
 
         <Route path="/doctor" element={<DoctorHome />} />
 
+        <Route
+          path="/dispatcher"
+          element={<DispatcherDashboard />}
+        />
         <Route
           path="*"
           element={

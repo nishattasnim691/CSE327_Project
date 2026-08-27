@@ -2,12 +2,15 @@ from fastapi import APIRouter, HTTPException
 from database.database_manager import DatabaseConnectionPool
 import uuid
 
+
 router = APIRouter(
     prefix="/api/auth",
     tags=["Authentication"]
 )
 
+
 db = DatabaseConnectionPool()
+
 
 
 @router.post("/signup")
@@ -15,26 +18,26 @@ def signup(user: dict):
 
     role = user.get("role", "patient")
 
+
     if role == "patient":
 
         patient_id = str(uuid.uuid4())
 
-        query = """
-        INSERT INTO Patients
-        (
-            PatientID,
-            Name,
-            Email,
-            Password,
-            DOB,
-            Gender,
-            BloodType
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """
 
         db.execute_query(
-            query,
+            """
+            INSERT INTO Patients
+            (
+                PatientID,
+                Name,
+                Email,
+                Password,
+                DOB,
+                Gender,
+                BloodType
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 patient_id,
                 user["name"],
@@ -46,69 +49,129 @@ def signup(user: dict):
             )
         )
 
+
         return {
             "userId": patient_id,
-            "name": user["name"],
-            "email": user["email"],
             "role": "patient"
         }
+
+
 
 
     if role == "doctor":
 
         doctor_id = str(uuid.uuid4())
 
-        query = """
-        INSERT INTO Doctors
-        (
-            DoctorID,
-            Name,
-            Email,
-            Password,
-            LicenseNumber,
-            Specialty
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-        """
 
         db.execute_query(
-            query,
+            """
+            INSERT INTO Doctors
+            (
+                DoctorID,
+                Name,
+                Email,
+                Password,
+                LicenseNumber,
+                Specialty
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
             (
                 doctor_id,
                 user["name"],
                 user["email"],
                 user["password"],
                 user["licenseNumber"],
-                user.get("specialty", "General")
+                user.get("specialty","General")
             )
         )
 
+
         return {
             "userId": doctor_id,
-            "name": user["name"],
-            "email": user["email"],
-            "role": "doctor",
-            "licenseNumber": user["licenseNumber"]
+            "role": "doctor"
         }
+
+
+
+
+    if role == "dispatcher":
+
+        dispatcher_id = str(uuid.uuid4())
+
+
+        db.execute_query(
+            """
+            INSERT INTO Dispatchers
+            (
+                DispatcherID,
+                Name,
+                Email,
+                Password
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                dispatcher_id,
+                user["name"],
+                user["email"],
+                user["password"]
+            )
+        )
+
+
+        return {
+            "userId": dispatcher_id,
+            "role": "dispatcher"
+        }
+
+
 
 
 @router.post("/login")
 def login(user: dict):
 
-    role = user.get("role", "patient")
+    role = user.get("role","patient")
+
 
     if role == "patient":
+
         query = """
         SELECT PatientID, Name, Email
         FROM Patients
         WHERE Email=? AND Password=?
         """
-    else:
+
+
+
+    elif role == "doctor":
+
         query = """
         SELECT DoctorID, Name, Email, LicenseNumber, Specialty
         FROM Doctors
         WHERE Email=? AND Password=?
         """
+
+
+
+    elif role == "dispatcher":
+
+        query = """
+        SELECT DispatcherID, Name, Email
+        FROM Dispatchers
+        WHERE Email=? AND Password=?
+        """
+
+
+
+    else:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid role"
+        )
+
+
 
     result = db.execute_query(
         query,
@@ -118,24 +181,34 @@ def login(user: dict):
         )
     )
 
+
+
     if not result:
+
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password"
         )
 
+
+
     account = result[0]
 
+
     response = {
+
         "userId": account[0],
         "name": account[1],
         "email": account[2],
         "role": role,
-        "token": "demo-token"
+        "token":"demo-token"
+
     }
 
     if role == "doctor":
-        response["licenseNumber"] = account[3]
-        response["specialty"] = account[4]
+        response.update({
+            "licenseNumber": account[3],
+            "specialty": account[4],
+        })
 
     return response

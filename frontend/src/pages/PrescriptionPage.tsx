@@ -33,6 +33,7 @@ import {
   subscribeToPrescriptions,
   type DigitalPrescription,
 } from "../services/PrescriptionStore";
+import { submitPharmacyCheckout } from "../services/api/PharmacyApi";
 
 type PaymentState =
   | "idle"
@@ -40,7 +41,9 @@ type PaymentState =
   | "success"
   | "failed";
 
-const PATIENT_ID = "P001";
+const PATIENT_ID =
+  localStorage.getItem("patientId") ||
+  "P001";
 const DELIVERY_FEE = 40;
 
 export default function CheckoutPage() {
@@ -210,51 +213,44 @@ export default function CheckoutPage() {
     );
 
     try {
-      const response =
-        await fetch("/api/checkout", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            prescriptionId:
-              prescription.prescriptionId,
-
-            patientId:
-              prescription.patientId,
-
-            address,
-
-            items:
-              checkoutItems,
-
-            deliveryFee:
-              DELIVERY_FEE,
-          }),
+      const result =
+        await submitPharmacyCheckout({
+          prescriptionId:
+            prescription.prescriptionId,
+          patientId:
+            prescription.patientId,
+          address,
+          items: checkoutItems,
+          deliveryFee: DELIVERY_FEE,
         });
 
-      const result =
-        await response.json();
-
-      if (!response.ok) {
+      if (!result.success) {
         setPaymentState(
           "failed"
         );
 
         setErrorMessage(
-          result.detail ||
+          result.message ||
           "Checkout failed"
         );
 
         return;
       }
 
+      const order =
+        result.order;
+
       setCreatedOrder(
-        result.order || result
+        order
       );
 
       setPaymentState(
         "success"
+      );
+
+      localStorage.setItem(
+        "latestPharmacyOrder",
+        JSON.stringify(order)
       );
     } catch (error) {
       setPaymentState(
@@ -268,20 +264,6 @@ export default function CheckoutPage() {
       return;
     }
 
-    /*
-      Temporary bridge for the
-      current frontend prototype.
-
-      OrderTrackingPage reads this
-      order until the shared backend
-      order service is connected.
-    */
-    localStorage.setItem(
-      "latestPharmacyOrder",
-      JSON.stringify(
-        createdOrder
-      )
-    );
   }
 
   if (!prescription) {

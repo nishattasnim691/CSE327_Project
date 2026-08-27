@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from database.database_manager import DatabaseConnectionPool
+from patterns.state.order_registry import orders
+from patterns.state.pharmacy_order import PharmacyOrder
 from schemas.member3_schemas import CheckoutRequestModel
 
 
@@ -27,8 +30,42 @@ class OrderService:
 
         total = subtotal + request.delivery_fee
 
+        order_id = f"ORD-{uuid4().hex[:8].upper()}"
+        created_at = datetime.now(timezone.utc).isoformat()
+        pharmacy_order = PharmacyOrder()
+
+        orders[order_id] = {
+            "order": pharmacy_order,
+            "patientId": request.patient_id,
+        }
+
+        DatabaseConnectionPool().execute_query(
+            """
+            INSERT INTO PharmacyOrders
+            (
+                OrderID,
+                PatientID,
+                Medicine,
+                Quantity,
+                Status,
+                Total,
+                CreatedAt
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                order_id,
+                request.patient_id,
+                ", ".join(item.medicine for item in request.items),
+                sum(item.quantity for item in request.items),
+                "Processing",
+                total,
+                created_at,
+            ),
+        )
+
         return {
-            "orderId": f"ORD-{uuid4().hex[:8].upper()}",
+            "orderId": order_id,
             "status": "Processing",
             "prescriptionId": request.prescription_id,
             "patientId": request.patient_id,
@@ -41,5 +78,5 @@ class OrderService:
                 for item in request.items
             ],
             "transactionId": transaction_id,
-            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "createdAt": created_at,
         }

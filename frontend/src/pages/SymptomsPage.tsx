@@ -21,12 +21,18 @@ import {
 
 
 const COMMON_SYMPTOMS = [
-  "Fever",
+  "Chest pain",
+  "Difficulty breathing",
+  "Severe bleeding",
+  "Unconscious",
+  "High fever",
+  "Persistent vomiting",
+  "Severe headache",
+  "Dehydration",
   "Cough",
+  "Cold",
+  "Mild fever",
   "Headache",
-  "Tiredness",
-  "Sore throat",
-  "Nausea",
 ];
 
 export default function SymptomsPage() {

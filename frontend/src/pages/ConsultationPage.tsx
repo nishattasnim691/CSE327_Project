@@ -48,6 +48,10 @@ export default function ConsultationPage() {
 
   const [messageText, setMessageText] =
     useState("");
+  const [simplifyMessages, setSimplifyMessages] =
+    useState(true);
+  const [messageLanguage, setMessageLanguage] =
+    useState<"English" | "Bangla">("English");
 
   const messagesEndRef =
     useRef<HTMLDivElement | null>(null);
@@ -153,6 +157,8 @@ export default function ConsultationPage() {
       {
         sender: "patient",
         text: clean,
+        simplify: simplifyMessages,
+        language: messageLanguage,
       }
     )
       .then((newMessage) => {
@@ -322,6 +328,31 @@ export default function ConsultationPage() {
                 </button>
               </div>
 
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[#59736A]">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={simplifyMessages}
+                    onChange={(event) => setSimplifyMessages(event.target.checked)}
+                    className="accent-[#1B7A6B]"
+                  />
+                  Simplify medical terms
+                </label>
+                <label className="flex items-center gap-2">
+                  Language
+                  <select
+                    value={messageLanguage}
+                    onChange={(event) =>
+                      setMessageLanguage(event.target.value as "English" | "Bangla")
+                    }
+                    className="rounded-md border border-[#CCDCD6] bg-white px-2 py-1 text-xs text-[#29443D]"
+                  >
+                    <option value="English">English</option>
+                    <option value="Bangla">Bangla</option>
+                  </select>
+                </label>
+              </div>
+
               <div className="mt-2 text-right text-[11px] text-[#9AA7A2]">
                 {
                   messageText.length
@@ -377,7 +408,7 @@ export default function ConsultationPage() {
                     />
                   }
                   label="Doctor"
-                  value="{doctorName}"
+                  value={doctorName}
                 />
 
                 <InfoItem

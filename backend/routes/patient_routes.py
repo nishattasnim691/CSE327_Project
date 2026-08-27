@@ -1,14 +1,20 @@
 from fastapi import APIRouter, HTTPException
 from database.database_manager import DatabaseConnectionPool
+from patterns.decorator.chat_interface import ChatInterface
+from patterns.decorator.jargon_simplifier import JargonSimplifierDecorator
+from patterns.decorator.translation import TranslationDecorator
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Literal
 import uuid
 
 router = APIRouter(prefix="/api", tags=["Patients"])
 
 class MessageCreate(BaseModel):
-    sender: str
+    sender: Literal["patient", "doctor"]
     text: str
+    simplify: bool = True
+    language: Literal["English", "Bangla"] = "English"
 
 
 @router.get("/patients/{patient_id}")
@@ -67,8 +73,10 @@ def get_messages(patient_id: str):
     return [
         {
             "id": m[0],
+            "patientId": patient_id,
             "sender": m[1],
             "text": m[2],
+            "time": m[3],
             "createdAt": m[3]
         }
         for m in messages
@@ -96,6 +104,13 @@ def send_message(patient_id: str, message: MessageCreate):
     message_id = str(uuid.uuid4())
     created = datetime.now().isoformat()
 
+    chat: ChatInterface = ChatInterface()
+    if message.simplify:
+        chat = JargonSimplifierDecorator(chat)
+    if message.language == "Bangla":
+        chat = TranslationDecorator(chat, language=message.language)
+    enhanced_text = chat.send_message(message.text)
+
     db.execute_query(
         """
         INSERT INTO ConsultationMessages
@@ -106,7 +121,7 @@ def send_message(patient_id: str, message: MessageCreate):
             message_id,
             patient_id,
             message.sender,
-            message.text,
+            enhanced_text,
             created
         )
     )
@@ -115,6 +130,7 @@ def send_message(patient_id: str, message: MessageCreate):
         "id": message_id,
         "patientId": patient_id,
         "sender": message.sender,
-        "text": message.text,
+        "text": enhanced_text,
+        "time": created,
         "createdAt": created
     }

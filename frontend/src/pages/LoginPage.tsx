@@ -46,50 +46,52 @@ export default function LoginPage() {
 
     setSubmitting(true);
 
-    try { 
-  const user = await login({ 
-    email: email.trim(), 
-    password, 
-    role, 
-  }); 
+    try {
+      const user = await login({
+        email: email.trim(),
+        password,
+        role,
+      });
 
 
-  // Save logged-in patient's ID for dashboard/profile API
-  // LoginResponse provides userId, not patientId.
-  if (user.role === "patient" && user.userId) {
-    localStorage.setItem(
-      "patientId",
-      user.userId
-    );
-  }
+      // Save logged-in patient's ID for dashboard/profile API
+      // LoginResponse provides userId, not patientId.
+      if (user.role === "patient" && user.userId) {
+        localStorage.setItem(
+          "patientId",
+          user.userId
+        );
+      }
 
-  if (user.token) { 
-    sessionStorage.setItem( 
-      "virtualClinicAuthToken", 
-      user.token 
-    ); 
-  } 
+      if (user.token) {
+        sessionStorage.setItem(
+          "virtualClinicAuthToken",
+          user.token
+        );
+      }
 
 
-  sessionStorage.setItem( 
-    "virtualClinicCurrentUser", 
-    JSON.stringify(user) 
-  ); 
+      sessionStorage.setItem(
+        "virtualClinicCurrentUser",
+        JSON.stringify(user)
+      );
 
-  navigate( 
-    user.role === "doctor" 
-      ? "/doctor" 
-      : "/kiosk" 
-  ); 
+     navigate(
+ user.role === "doctor"
+ ? "/doctor"
+ : user.role === "dispatcher"
+ ? "/dispatcher"
+ : "/kiosk"
+);
 
-} catch (caughtError) { 
-  setError( 
-    caughtError instanceof Error 
-      ? caughtError.message 
-      : "Login could not be completed." 
-  ); 
-    } finally { 
-      setSubmitting(false); 
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Login could not be completed."
+      );
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -165,15 +167,14 @@ export default function LoginPage() {
               Select your portal type and enter your account credentials.
             </p>
 
-            <div className="mt-7 grid grid-cols-2 gap-3 rounded-2xl bg-[#E9F2EF] p-1.5">
+            <div className="mt-7 grid grid-cols-3 gap-3 rounded-2xl bg-[#E9F2EF] p-1.5">
               <button
                 type="button"
                 onClick={() => setRole("patient")}
-                className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                  role === "patient"
+                className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${role === "patient"
                     ? "bg-white text-[#0F5A50] shadow-sm"
                     : "text-[#70857E]"
-                }`}
+                  }`}
               >
                 <UserRound size={17} />
                 Patient
@@ -182,14 +183,28 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setRole("doctor")}
-                className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                  role === "doctor"
+                className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${role === "doctor"
                     ? "bg-white text-[#0F5A50] shadow-sm"
                     : "text-[#70857E]"
-                }`}
+                  }`}
               >
                 <Stethoscope size={17} />
                 Doctor
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRole("dispatcher")}
+                className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${role === "dispatcher"
+                    ? "bg-white text-[#0F5A50] shadow-sm"
+                    : "text-[#70857E]"
+                  }`}
+              >
+
+                <ShieldCheck size={17} />
+
+                Dispatcher
+
               </button>
             </div>
 
@@ -273,11 +288,10 @@ export default function LoginPage() {
               >
                 {submitting
                   ? "Signing in..."
-                  : `Sign in as ${
-                      role === "doctor"
-                        ? "Doctor"
-                        : "Patient"
-                    }`}
+                  : `Sign in as ${role === "doctor"
+                    ? "Doctor"
+                    : "Patient"
+                  }`}
               </button>
             </form>
 

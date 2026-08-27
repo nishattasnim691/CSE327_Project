@@ -51,11 +51,25 @@ export interface AcceptedDoctorCase {
   triageSource?: string;
   doctorName?: string;
 }
-export async function getAcceptedDoctorCases(): Promise<AcceptedDoctorCase[]> {
+export async function getAcceptedDoctorCases(
+    doctorId?: string
+): Promise<AcceptedDoctorCase[]> {
     return apiRequest<AcceptedDoctorCase[]>(
-        "/api/doctor/accepted-cases",
+        doctorId
+            ? `/api/doctor/accepted-cases?doctor_id=${encodeURIComponent(doctorId)}`
+            : "/api/doctor/accepted-cases",
         {
             method: "GET"
         }
+    );
+}
+
+export async function completeDoctorCase(
+    patientId: string,
+    doctorId: string
+): Promise<void> {
+    await apiRequest(
+        `/api/doctor/cases/${encodeURIComponent(patientId)}/complete?doctor_id=${encodeURIComponent(doctorId)}`,
+        { method: "PUT" }
     );
 }

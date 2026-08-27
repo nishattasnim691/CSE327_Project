@@ -1,3 +1,5 @@
+import re
+
 from .chat_interface import ChatInterface
 
 
@@ -13,10 +15,16 @@ class JargonSimplifierDecorator(ChatInterface):
             "hypertension": "high blood pressure",
             "antipyretic": "fever medicine",
             "edema": "swelling",
-            "respiratory": "breathing"
+            "respiratory": "breathing",
+            "dengue": "dengue fever",
         }
 
         for medical_word, simple_word in replacements.items():
-            message = message.replace(medical_word, simple_word)
+            message = re.sub(
+                rf"\b{re.escape(medical_word)}\b",
+                simple_word,
+                message,
+                flags=re.IGNORECASE,
+            )
 
         return message

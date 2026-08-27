@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import {
   Stethoscope,
+  Truck,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -128,7 +129,7 @@ export default function SignupPage() {
     try {
 
 
-      await signup({
+      const account = await signup({
 
         name: name.trim(),
 
@@ -153,7 +154,15 @@ export default function SignupPage() {
 
 
 
-      navigate("/login");
+      if (account.role === "doctor") {
+        sessionStorage.setItem(
+          "virtualClinicCurrentUser",
+          JSON.stringify(account)
+        );
+        navigate("/doctor");
+      } else {
+        navigate("/login");
+      }
 
 
     } catch (caughtError) {
@@ -251,7 +260,7 @@ export default function SignupPage() {
 
 
 
-            <div className="mt-7 grid grid-cols-2 gap-3">
+            <div className="mt-7 grid gap-3 sm:grid-cols-3">
 
 
               <button
@@ -278,6 +287,21 @@ export default function SignupPage() {
                 }`}
               >
                 Doctor
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRole("dispatcher")}
+                className={`rounded-xl border px-4 py-3 font-semibold ${
+                  role === "dispatcher"
+                  ? "border-[#1B7A6B] bg-[#E8F4F0]"
+                  : ""
+                }`}
+              >
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Truck size={17} />
+                  Dispatcher
+                </span>
               </button>
 
 
